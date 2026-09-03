@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
-import AuthModal from "@/components/AuthModal";
-import { supabase } from "@/lib/supabase";
+import AuthModal from "../components/AuthModal";
+import { supabase } from "../lib/supabase";
 
 const tools = [
   { id: "ceo", name: "AI餐饮CEO", icon: Bot },
