@@ -17,7 +17,7 @@ import {
   BarChart3,
   LogOut,
 } from "lucide-react";
-
+import { useEffect, useState } from "react";
 import ProModal from "@/components/ProModal";
 import AuthModal from "@/components/AuthModal";
 import { supabase } from "@/lib/supabase";
