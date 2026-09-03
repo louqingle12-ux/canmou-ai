@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase";
 import { X, Mail, Lock, Sparkles } from "lucide-react";
 
 type Props = {
