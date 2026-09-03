@@ -609,18 +609,31 @@ export default function Home() {
                 : "解锁全部AI经营能力"}
             </p>
 
-            <button
-              onClick={() =>
-                setShowPro(true)
-              }
-            <button
-  onClick={() => {
-    window.location.href = "/pro";
-  }}
->
-  立即升级
-</button>
-          </div>
+            <div className="proCard">
+  <Sparkles size={17} />
+
+  <strong>
+    {remaining === -1
+      ? "PRO会员"
+      : "升级 PRO"}
+  </strong>
+
+  <p>
+    {remaining === -1
+      ? "已解锁全部AI经营能力"
+      : "解锁全部AI经营能力"}
+  </p>
+
+  <button
+    onClick={() => {
+      window.location.href = "/pro";
+    }}
+  >
+    {remaining === -1
+      ? "查看会员"
+      : "立即升级"}
+  </button>
+</div>
 
           {/* =================================================
               ACCOUNT
