@@ -19,16 +19,33 @@ import {
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
-import AuthModal from "../components/AuthModal";
-import { supabase } from "../lib/supabase";
+import ProModal from "@/components/ProModal";
+import AuthModal from "@/components/AuthModal";
+import { supabase } from "@/lib/supabase";
 
 const tools = [
   { id: "ceo", name: "AI餐饮CEO", icon: Bot },
   { id: "menu", name: "菜单AI", icon: Utensils },
-  { id: "review", name: "差评AI", icon: MessageSquareWarning },
-  { id: "profit", name: "利润AI", icon: Coins },
-  { id: "marketing", name: "营销AI", icon: TrendingUp },
-  { id: "inventory", name: "库存AI", icon: Package },
+  {
+    id: "review",
+    name: "差评AI",
+    icon: MessageSquareWarning,
+  },
+  {
+    id: "profit",
+    name: "利润AI",
+    icon: Coins,
+  },
+  {
+    id: "marketing",
+    name: "营销AI",
+    icon: TrendingUp,
+  },
+  {
+    id: "inventory",
+    name: "库存AI",
+    icon: Package,
+  },
 ];
 
 const dishes = [
@@ -73,33 +90,53 @@ export default function Home() {
 
   const [showAuth, setShowAuth] = useState(false);
 
+  const [showPro, setShowPro] = useState(false);
+
+  /**
+   * remaining:
+   *
+   * -1 = PRO无限
+   * 0  = 免费额度用完
+   * 1~5 = 剩余免费次数
+   */
   const [remaining, setRemaining] = useState(5);
 
   const [authLoading, setAuthLoading] = useState(true);
 
   /**
-   * =====================================================
+   * =========================================================
    * 初始化登录状态
-   * =====================================================
+   * =========================================================
    */
 
   useEffect(() => {
     let mounted = true;
 
     async function init() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      try {
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession();
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      setSession(session);
+        setSession(currentSession);
 
-      if (session) {
-        await loadCredits(session);
+        if (currentSession) {
+          await loadCredits(currentSession);
+        } else {
+          setRemaining(5);
+        }
+      } catch (error) {
+        console.error(
+          "Auth initialization error:",
+          error
+        );
+      } finally {
+        if (mounted) {
+          setAuthLoading(false);
+        }
       }
-
-      setAuthLoading(false);
     }
 
     init();
@@ -127,13 +164,16 @@ export default function Home() {
   }, []);
 
   /**
-   * =====================================================
-   * 获取额度
-   * =====================================================
+   * =========================================================
+   * 获取用户套餐 + AI额度
+   * =========================================================
    */
 
-  async function loadCredits(currentSession?: any) {
-    const current = currentSession || session;
+  async function loadCredits(
+    currentSession?: any
+  ) {
+    const current =
+      currentSession || session;
 
     if (!current?.user?.id) {
       setRemaining(5);
@@ -141,43 +181,118 @@ export default function Home() {
     }
 
     try {
-      const { count, error } = await supabase
+      /**
+       * -----------------------------------------------------
+       * 1. 查询用户套餐
+       * -----------------------------------------------------
+       */
+
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select("plan")
+        .eq(
+          "id",
+          current.user.id
+        )
+        .maybeSingle();
+
+      if (profileError) {
+        console.error(
+          "Load profile error:",
+          profileError
+        );
+      }
+
+      /**
+       * -----------------------------------------------------
+       * 2. PRO用户
+       * -----------------------------------------------------
+       */
+
+      if (
+        profile?.plan === "pro"
+      ) {
+        setRemaining(-1);
+        return;
+      }
+
+      /**
+       * -----------------------------------------------------
+       * 3. 免费用户
+       * -----------------------------------------------------
+       */
+
+      const {
+        count,
+        error,
+      } = await supabase
         .from("ai_usage")
         .select("*", {
           count: "exact",
           head: true,
         })
-        .eq("user_id", current.user.id);
+        .eq(
+          "user_id",
+          current.user.id
+        );
 
       if (error) {
-        console.error("Load credits error:", error);
+        console.error(
+          "Load credits error:",
+          error
+        );
         return;
       }
 
       setRemaining(
-        Math.max(0, 5 - (count || 0))
+        Math.max(
+          0,
+          5 - (count || 0)
+        )
       );
     } catch (error) {
-      console.error("Credits error:", error);
+      console.error(
+        "Credits error:",
+        error
+      );
     }
   }
 
   /**
-   * =====================================================
-   * AI 请求
-   * =====================================================
+   * =========================================================
+   * AI请求
+   * =========================================================
    */
 
   async function askAI() {
-    if (!question.trim() || loading) return;
+    if (
+      !question.trim() ||
+      loading
+    ) {
+      return;
+    }
 
     /**
-     * 没登录 → 登录
+     * -------------------------------------------------------
+     * 1. 获取最新Session
+     * -------------------------------------------------------
      */
 
     const {
-      data: { session: currentSession },
-    } = await supabase.auth.getSession();
+      data: {
+        session: currentSession,
+      },
+    } =
+      await supabase.auth.getSession();
+
+    /**
+     * -------------------------------------------------------
+     * 2. 未登录
+     * -------------------------------------------------------
+     */
 
     if (!currentSession) {
       setShowAuth(true);
@@ -185,15 +300,17 @@ export default function Home() {
     }
 
     /**
-     * 前端提前提示
+     * -------------------------------------------------------
+     * 3. 免费额度用完
      *
-     * 真正额度判断仍然在服务器。
+     * PRO = -1，不拦截
+     * -------------------------------------------------------
      */
 
-    if (remaining === 0) {
-      setAnswer(
-        "你的5次免费AI分析已经用完，请升级 PRO 后继续使用。"
-      );
+    if (
+      remaining === 0
+    ) {
+      setShowPro(true);
       return;
     }
 
@@ -201,32 +318,50 @@ export default function Home() {
     setAnswer("");
 
     try {
-      const res = await fetch("/api/ai", {
-        method: "POST",
+      const res =
+        await fetch(
+          "/api/ai",
+          {
+            method: "POST",
 
-        headers: {
-          "Content-Type": "application/json",
+            headers: {
+              "Content-Type":
+                "application/json",
 
-          Authorization:
-            `Bearer ${currentSession.access_token}`,
-        },
+              Authorization:
+                `Bearer ${currentSession.access_token}`,
+            },
 
-        body: JSON.stringify({
-          tool: active,
-          message: question,
-        }),
-      });
+            body: JSON.stringify({
+              tool: active,
+              message:
+                question.trim(),
+            }),
+          }
+        );
 
-      const data = await res.json();
+      let data: any = null;
+
+      try {
+        data =
+          await res.json();
+      } catch {
+        data = {};
+      }
 
       /**
-       * 未登录
+       * -----------------------------------------------------
+       * 4. 登录失效
+       * -----------------------------------------------------
        */
 
-      if (res.status === 401) {
+      if (
+        res.status === 401
+      ) {
         await supabase.auth.signOut();
 
         setSession(null);
+        setRemaining(5);
         setShowAuth(true);
 
         throw new Error(
@@ -235,36 +370,51 @@ export default function Home() {
       }
 
       /**
-       * 免费额度用完
+       * -----------------------------------------------------
+       * 5. 免费额度用完
+       * -----------------------------------------------------
        */
 
-      if (res.status === 402) {
+      if (
+        res.status === 402
+      ) {
         setRemaining(0);
-
-        throw new Error(
-          data.error ||
-            "免费AI次数已经用完，请升级 PRO。"
-        );
+        setShowPro(true);
+        return;
       }
+
+      /**
+       * -----------------------------------------------------
+       * 6. 其它错误
+       * -----------------------------------------------------
+       */
 
       if (!res.ok) {
         throw new Error(
-          data.error ||
-            "AI请求失败"
+          data?.error ||
+            "AI请求失败，请稍后再试。"
         );
       }
 
+      /**
+       * -----------------------------------------------------
+       * 7. AI结果
+       * -----------------------------------------------------
+       */
+
       setAnswer(
-        data.answer ||
+        data?.answer ||
           "AI没有返回有效内容。"
       );
 
       /**
-       * 服务端返回最新额度
+       * -----------------------------------------------------
+       * 8. 更新额度
+       * -----------------------------------------------------
        */
 
       if (
-        typeof data.remaining ===
+        typeof data?.remaining ===
         "number"
       ) {
         setRemaining(
@@ -276,6 +426,11 @@ export default function Home() {
         );
       }
     } catch (error: any) {
+      console.error(
+        "AI request error:",
+        error
+      );
+
       setAnswer(
         error?.message ||
           "请求失败，请稍后再试。"
@@ -286,13 +441,20 @@ export default function Home() {
   }
 
   /**
-   * =====================================================
+   * =========================================================
    * 退出登录
-   * =====================================================
+   * =========================================================
    */
 
   async function logout() {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error(
+        "Logout error:",
+        error
+      );
+    }
 
     setSession(null);
     setRemaining(5);
@@ -301,29 +463,53 @@ export default function Home() {
   }
 
   /**
-   * =====================================================
+   * =========================================================
    * 登录成功
-   * =====================================================
+   * =========================================================
    */
 
   async function handleAuthSuccess() {
     setShowAuth(false);
 
     const {
-      data: { session: newSession },
-    } = await supabase.auth.getSession();
+      data: {
+        session: newSession,
+      },
+    } =
+      await supabase.auth.getSession();
 
     setSession(newSession);
 
     if (newSession) {
-      await loadCredits(newSession);
+      await loadCredits(
+        newSession
+      );
     }
   }
 
   /**
-   * =====================================================
-   * 账户显示名称
-   * =====================================================
+   * =========================================================
+   * PRO购买成功
+   * =========================================================
+   */
+
+  async function handleProSuccess() {
+    setShowPro(false);
+
+    /**
+     * 重新获取用户套餐
+     */
+    if (session) {
+      await loadCredits(
+        session
+      );
+    }
+  }
+
+  /**
+   * =========================================================
+   * 用户信息
+   * =========================================================
    */
 
   const email =
@@ -331,14 +517,16 @@ export default function Home() {
 
   const avatarLetter =
     email
-      ? email.charAt(0).toUpperCase()
+      ? email
+          .charAt(0)
+          .toUpperCase()
       : "餐";
 
   return (
     <main className="app">
-      {/* =================================================
+      {/* =====================================================
           SIDEBAR
-      ================================================= */}
+      ===================================================== */}
 
       <aside className="sidebar">
         <div className="brand">
@@ -347,7 +535,10 @@ export default function Home() {
           </div>
 
           <div>
-            <strong>餐谋AI</strong>
+            <strong>
+              餐谋AI
+            </strong>
+
             <span>
               Restaurant OS
             </span>
@@ -359,58 +550,87 @@ export default function Home() {
         </div>
 
         <nav>
-          {tools.map((tool) => {
-            const Icon = tool.icon;
+          {tools.map(
+            (tool) => {
+              const Icon =
+                tool.icon;
 
-            return (
-              <button
-                key={tool.id}
-                className={
-                  active === tool.id
-                    ? "sideItem active"
-                    : "sideItem"
-                }
-                onClick={() =>
-                  setActive(tool.id)
-                }
-              >
-                <Icon size={18} />
+              return (
+                <button
+                  key={tool.id}
+                  className={
+                    active ===
+                    tool.id
+                      ? "sideItem active"
+                      : "sideItem"
+                  }
+                  onClick={() =>
+                    setActive(
+                      tool.id
+                    )
+                  }
+                >
+                  <Icon
+                    size={18}
+                  />
 
-                <span>
-                  {tool.name}
-                </span>
+                  <span>
+                    {
+                      tool.name
+                    }
+                  </span>
 
-                {active === tool.id && (
-                  <i />
-                )}
-              </button>
-            );
-          })}
+                  {active ===
+                    tool.id && (
+                    <i />
+                  )}
+                </button>
+              );
+            }
+          )}
         </nav>
 
         <div className="sideBottom">
+          {/* PRO */}
+
           <div className="proCard">
-            <Sparkles size={17} />
+            <Sparkles
+              size={17}
+            />
 
             <strong>
-              升级 PRO
+              {remaining === -1
+                ? "PRO会员"
+                : "升级 PRO"}
             </strong>
 
             <p>
-              解锁全部AI经营能力
+              {remaining === -1
+                ? "已解锁全部AI经营能力"
+                : "解锁全部AI经营能力"}
             </p>
 
-            <button>
-              立即升级
+            <button
+              onClick={() =>
+                setShowPro(true)
+              }
+            >
+              {remaining === -1
+                ? "查看会员"
+                : "立即升级"}
             </button>
           </div>
 
-          {/* 登录账户 */}
+          {/* =================================================
+              ACCOUNT
+          ================================================= */}
 
           {session ? (
             <div className="account">
               <div className="avatar">
-                {avatarLetter}
+                {
+                  avatarLetter
+                }
               </div>
 
               <div
@@ -425,9 +645,11 @@ export default function Home() {
 
                 <span
                   style={{
-                    display: "block",
+                    display:
+                      "block",
                     maxWidth: 120,
-                    overflow: "hidden",
+                    overflow:
+                      "hidden",
                     textOverflow:
                       "ellipsis",
                     whiteSpace:
@@ -439,32 +661,46 @@ export default function Home() {
               </div>
 
               <button
-                onClick={logout}
+                onClick={
+                  logout
+                }
                 title="退出登录"
                 style={{
                   border: 0,
                   background:
                     "transparent",
-                  color: "#71847b",
+                  color:
+                    "#71847b",
                   padding: 4,
+                  cursor:
+                    "pointer",
                 }}
               >
-                <LogOut size={15} />
+                <LogOut
+                  size={15}
+                />
               </button>
             </div>
           ) : (
             <button
               className="account"
               onClick={() =>
-                setShowAuth(true)
+                setShowAuth(
+                  true
+                )
               }
               style={{
-                width: "100%",
+                width:
+                  "100%",
                 border: 0,
                 background:
                   "transparent",
-                color: "inherit",
-                textAlign: "left",
+                color:
+                  "inherit",
+                textAlign:
+                  "left",
+                cursor:
+                  "pointer",
               }}
             >
               <div className="avatar">
@@ -485,17 +721,18 @@ export default function Home() {
         </div>
       </aside>
 
-      {/* =================================================
-          MAIN CONTENT
-      ================================================= */}
+      {/* =====================================================
+          MAIN
+      ===================================================== */}
 
       <section className="content">
-        {/* TOP BAR */}
+        {/* TOPBAR */}
 
         <header className="topbar">
           <div>
             <div className="breadcrumb">
-              我的餐厅 / 经营驾驶舱
+              我的餐厅 /
+              经营驾驶舱
             </div>
 
             <h1>
@@ -505,23 +742,27 @@ export default function Home() {
 
           <div className="topActions">
             <button className="iconButton">
-              <Bell size={19} />
+              <Bell
+                size={19}
+              />
             </button>
 
             <button className="dateButton">
               2026年9月3日
             </button>
 
-            {/* 登录状态 */}
-
             {!authLoading &&
               (session ? (
                 <button
                   className="accountButton"
-                  onClick={logout}
+                  onClick={
+                    logout
+                  }
                 >
                   <span>
-                    {avatarLetter}
+                    {
+                      avatarLetter
+                    }
                   </span>
 
                   退出
@@ -530,7 +771,9 @@ export default function Home() {
                 <button
                   className="loginButton"
                   onClick={() =>
-                    setShowAuth(true)
+                    setShowAuth(
+                      true
+                    )
                   }
                 >
                   登录 / 注册
@@ -539,18 +782,22 @@ export default function Home() {
           </div>
         </header>
 
-        {/* HERO */}
+        {/* =====================================================
+            HERO
+        ===================================================== */}
 
         <section className="heroDashboard">
           <div className="heroText">
             <div className="status">
               <span />
-              DeepSeek AI 实时分析
+              DeepSeek AI
+              实时分析
             </div>
 
             <h2>
               今天的生意，
               <br />
+
               <em>
                 AI帮你盯着。
               </em>
@@ -565,14 +812,20 @@ export default function Home() {
               className="heroButton"
               onClick={() =>
                 document
-                  .getElementById("ai")
+                  .getElementById(
+                    "ai"
+                  )
                   ?.scrollIntoView({
-                    behavior: "smooth",
+                    behavior:
+                      "smooth",
                   })
               }
             >
               开始AI诊断
-              <ArrowUpRight size={17} />
+
+              <ArrowUpRight
+                size={17}
+              />
             </button>
           </div>
 
@@ -598,46 +851,59 @@ export default function Home() {
           </div>
         </section>
 
-        {/* STATS */}
+        {/* =====================================================
+            STATS
+        ===================================================== */}
 
         <section className="stats">
           <Stat
             title="今日营业额"
             value="¥8,620"
             change="+12.8%"
-            icon={<Coins />}
+            icon={
+              <Coins />
+            }
           />
 
           <Stat
             title="今日订单"
             value="386"
             change="+8.4%"
-            icon={<ShoppingBag />}
+            icon={
+              <ShoppingBag />
+            }
           />
 
           <Stat
             title="客单价"
             value="¥22.33"
             change="+3.2%"
-            icon={<BarChart3 />}
+            icon={
+              <BarChart3 />
+            }
           />
 
           <Stat
             title="预计毛利"
             value="¥4,921"
             change="+15.7%"
-            icon={<TrendingUp />}
+            icon={
+              <TrendingUp />
+            }
           />
         </section>
 
-        {/* MAIN GRID */}
+        {/* =====================================================
+            MAIN GRID
+        ===================================================== */}
 
         <section className="mainGrid">
           <div className="panel menuPanel">
             <div className="panelHeader">
               <div>
                 <span>
-                  MENU INTELLIGENCE
+                  MENU
+                  INTELLIGENCE
                 </span>
 
                 <h3>
@@ -647,56 +913,83 @@ export default function Home() {
 
               <button>
                 查看全部
-                <ChevronRight size={15} />
+
+                <ChevronRight
+                  size={15}
+                />
               </button>
             </div>
 
             <div className="dishGrid">
-              {dishes.map((dish) => (
-                <div
-                  className="dish"
-                  key={dish.name}
-                >
-                  <div className="dishImage">
-                    <img
-                      src={dish.image}
-                      alt={dish.name}
-                    />
+              {dishes.map(
+                (dish) => (
+                  <div
+                    className="dish"
+                    key={
+                      dish.name
+                    }
+                  >
+                    <div className="dishImage">
+                      <img
+                        src={
+                          dish.image
+                        }
+                        alt={
+                          dish.name
+                        }
+                      />
 
-                    <b>
-                      {dish.tag ===
-                        "爆款" && (
-                        <Flame size={12} />
-                      )}
+                      <b>
+                        {dish.tag ===
+                          "爆款" && (
+                          <Flame
+                            size={
+                              12
+                            }
+                          />
+                        )}
 
-                      {dish.tag}
-                    </b>
-                  </div>
-
-                  <div className="dishInfo">
-                    <strong>
-                      {dish.name}
-                    </strong>
-
-                    <div>
-                      <span>
-                        {dish.price}
-                      </span>
-
-                      <small>
-                        {dish.sales}份
-                      </small>
+                        {
+                          dish.tag
+                        }
+                      </b>
                     </div>
 
-                    <label>
-                      毛利率
-                      <em>
-                        {dish.margin}
-                      </em>
-                    </label>
+                    <div className="dishInfo">
+                      <strong>
+                        {
+                          dish.name
+                        }
+                      </strong>
+
+                      <div>
+                        <span>
+                          {
+                            dish.price
+                          }
+                        </span>
+
+                        <small>
+                          {
+                            dish.sales
+                          }
+                          份
+                        </small>
+                      </div>
+
+                      <label>
+                        毛利率
+
+                        <em>
+                          {
+                            dish.margin
+                          }
+                        </em>
+                      </label>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           </div>
 
@@ -714,12 +1007,16 @@ export default function Home() {
                 </h3>
               </div>
 
-              <Bot size={21} />
+              <Bot
+                size={21}
+              />
             </div>
 
             <div className="insight">
               <div className="insightIcon">
-                <TrendingUp size={19} />
+                <TrendingUp
+                  size={19}
+                />
               </div>
 
               <div>
@@ -755,22 +1052,32 @@ export default function Home() {
             <button
               className="fullButton"
               onClick={() => {
-                setActive("ceo");
+                setActive(
+                  "ceo"
+                );
 
                 document
-                  .getElementById("ai")
+                  .getElementById(
+                    "ai"
+                  )
                   ?.scrollIntoView({
-                    behavior: "smooth",
+                    behavior:
+                      "smooth",
                   });
               }}
             >
               让AI深度分析
-              <ChevronRight size={16} />
+
+              <ChevronRight
+                size={16}
+              />
             </button>
           </div>
         </section>
 
-        {/* AI */}
+        {/* =====================================================
+            AI PANEL
+        ===================================================== */}
 
         <section
           className="panel aiPanel"
@@ -779,8 +1086,12 @@ export default function Home() {
           <div className="aiHeader">
             <div>
               <div className="aiBadge">
-                <Sparkles size={14} />
-                DEEPSEEK POWERED
+                <Sparkles
+                  size={14}
+                />
+
+                DEEPSEEK
+                POWERED
               </div>
 
               <h3>
@@ -794,28 +1105,38 @@ export default function Home() {
               {/* 额度 */}
 
               <div className="creditBadge">
-                {remaining === -1
+                {remaining ===
+                -1
                   ? "PRO · 无限AI分析"
                   : `免费额度 · 剩余 ${remaining} 次`}
               </div>
             </div>
 
-            <Bot size={34} />
+            <Bot
+              size={34}
+            />
           </div>
 
           <div className="aiInput">
             <textarea
-              value={question}
+              value={
+                question
+              }
               onChange={(e) =>
                 setQuestion(
                   e.target.value
                 )
               }
               placeholder="例如：今天营业额下降了15%，帮我找出可能原因，并告诉我明天应该怎么做……"
+              disabled={
+                loading
+              }
             />
 
             <button
-              onClick={askAI}
+              onClick={
+                askAI
+              }
               disabled={
                 loading ||
                 !question.trim()
@@ -831,10 +1152,15 @@ export default function Home() {
             </button>
           </div>
 
+          {/* AI RESULT */}
+
           {answer && (
             <div className="aiAnswer">
               <div className="answerTitle">
-                <Bot size={18} />
+                <Bot
+                  size={18}
+                />
+
                 餐谋AI分析结果
               </div>
 
@@ -846,17 +1172,36 @@ export default function Home() {
         </section>
       </section>
 
-      {/* =================================================
+      {/* =====================================================
           AUTH MODAL
-      ================================================= */}
+      ===================================================== */}
 
       {showAuth && (
         <AuthModal
           onClose={() =>
-            setShowAuth(false)
+            setShowAuth(
+              false
+            )
           }
           onSuccess={
             handleAuthSuccess
+          }
+        />
+      )}
+
+      {/* =====================================================
+          PRO MODAL
+      ===================================================== */}
+
+      {showPro && (
+        <ProModal
+          onClose={() =>
+            setShowPro(
+              false
+            )
+          }
+          onSuccess={
+            handleProSuccess
           }
         />
       )}
@@ -897,7 +1242,10 @@ function Stat({
         </strong>
 
         <small>
-          <ArrowUpRight size={12} />
+          <ArrowUpRight
+            size={12}
+          />
+
           {change}
         </small>
       </div>
