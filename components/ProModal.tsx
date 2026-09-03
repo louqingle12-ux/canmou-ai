@@ -8,8 +8,8 @@ import {
 } from "lucide-react";
 
 type Props = {
-  open: boolean;
   onClose: () => void;
+  onSuccess?: () => void | Promise<void>;
 };
 
 export default function ProModal({
