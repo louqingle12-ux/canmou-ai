@@ -613,11 +613,13 @@ export default function Home() {
               onClick={() =>
                 setShowPro(true)
               }
-            >
-              {remaining === -1
-                ? "查看会员"
-                : "立即升级"}
-            </button>
+            <button
+  onClick={() => {
+    window.location.href = "/pro";
+  }}
+>
+  立即升级
+</button>
           </div>
 
           {/* =================================================
