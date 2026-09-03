@@ -1,8 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "../lib/supabase";
-import { X, Mail, Lock, Sparkles } from "lucide-react";
+import {
+  X,
+  Mail,
+  Lock,
+  Sparkles,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   onClose: () => void;
@@ -20,19 +28,32 @@ export default function AuthModal({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState("");
 
   async function handleSubmit(
     e: React.FormEvent
   ) {
     e.preventDefault();
 
+    if (loading) return;
+
     setError("");
     setSuccess("");
 
-    if (!email.trim()) {
+    const cleanEmail =
+      email.trim().toLowerCase();
+
+    if (!cleanEmail) {
       setError("请输入邮箱");
       return;
     }
@@ -50,14 +71,23 @@ export default function AuthModal({
     setLoading(true);
 
     try {
+      /**
+       * ============================
+       * 登录
+       * ============================
+       */
+
       if (mode === "login") {
         const {
           data,
           error,
-        } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
+        } =
+          await supabase.auth.signInWithPassword(
+            {
+              email: cleanEmail,
+              password,
+            }
+          );
 
         if (error) {
           throw error;
@@ -70,39 +100,63 @@ export default function AuthModal({
         }
 
         onSuccess();
+
         return;
       }
+
+      /**
+       * ============================
+       * 注册
+       * ============================
+       */
 
       const {
         data,
         error,
-      } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-      });
+      } =
+        await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+        });
 
       if (error) {
         throw error;
       }
+
+      /**
+       * 如果 Supabase 没有开启邮箱验证
+       */
 
       if (data.session) {
         onSuccess();
         return;
       }
 
+      /**
+       * 如果开启邮箱验证
+       */
+
       setSuccess(
-        "注册成功！如果开启了邮箱验证，请先去邮箱完成验证，然后回来登录。"
+        "注册成功！请先去邮箱完成验证，然后返回餐谋AI登录。"
       );
 
       setMode("login");
+      setPassword("");
     } catch (err: any) {
-      console.error(err);
+      console.error(
+        "Auth error:",
+        err
+      );
 
       const message =
-        err?.message || "操作失败，请稍后再试。";
+        err?.message ||
+        "操作失败，请稍后再试。";
+
+      const lower =
+        message.toLowerCase();
 
       if (
-        message.toLowerCase().includes(
+        lower.includes(
           "invalid login credentials"
         )
       ) {
@@ -110,12 +164,28 @@ export default function AuthModal({
           "邮箱或密码错误，请检查后重试。"
         );
       } else if (
-        message
-          .toLowerCase()
-          .includes("user already registered")
+        lower.includes(
+          "user already registered"
+        )
       ) {
         setError(
           "这个邮箱已经注册，请直接登录。"
+        );
+      } else if (
+        lower.includes(
+          "email not confirmed"
+        )
+      ) {
+        setError(
+          "邮箱还没有验证，请先去邮箱完成验证。"
+        );
+      } else if (
+        lower.includes(
+          "password should be at least"
+        )
+      ) {
+        setError(
+          "密码至少需要6位。"
         );
       } else {
         setError(message);
@@ -125,26 +195,43 @@ export default function AuthModal({
     }
   }
 
+  function switchMode(
+    nextMode: "login" | "register"
+  ) {
+    setMode(nextMode);
+    setError("");
+    setSuccess("");
+    setPassword("");
+  }
+
   return (
     <div
       className="authOverlay"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) {
+        if (
+          e.target ===
+          e.currentTarget
+        ) {
           onClose();
         }
       }}
     >
       <div className="authModal">
+        {/* 关闭 */}
+
         <button
           className="authClose"
+          type="button"
           onClick={onClose}
           aria-label="关闭"
         >
           <X size={20} />
         </button>
 
+        {/* Logo */}
+
         <div className="authLogo">
-          <Sparkles size={18} />
+          <Sparkles size={19} />
         </div>
 
         <h2>
@@ -159,7 +246,11 @@ export default function AuthModal({
             : "注册即可获得5次免费AI分析"}
         </p>
 
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={handleSubmit}
+        >
+          {/* 邮箱 */}
+
           <label>邮箱</label>
 
           <div className="authInput">
@@ -169,12 +260,17 @@ export default function AuthModal({
               type="email"
               value={email}
               onChange={(e) =>
-                setEmail(e.target.value)
+                setEmail(
+                  e.target.value
+                )
               }
               placeholder="请输入邮箱"
               autoComplete="email"
+              disabled={loading}
             />
           </div>
+
+          {/* 密码 */}
 
           <label>密码</label>
 
@@ -182,10 +278,16 @@ export default function AuthModal({
             <Lock size={17} />
 
             <input
-              type="password"
+              type={
+                showPassword
+                  ? "text"
+                  : "password"
+              }
               value={password}
               onChange={(e) =>
-                setPassword(e.target.value)
+                setPassword(
+                  e.target.value
+                )
               }
               placeholder="至少6位密码"
               autoComplete={
@@ -193,8 +295,27 @@ export default function AuthModal({
                   ? "current-password"
                   : "new-password"
               }
+              disabled={loading}
             />
+
+            <button
+              type="button"
+              className="passwordToggle"
+              onClick={() =>
+                setShowPassword(
+                  !showPassword
+                )
+              }
+            >
+              {showPassword ? (
+                <EyeOff size={17} />
+              ) : (
+                <Eye size={17} />
+              )}
+            </button>
           </div>
+
+          {/* 错误 */}
 
           {error && (
             <div className="authError">
@@ -202,11 +323,15 @@ export default function AuthModal({
             </div>
           )}
 
+          {/* 成功 */}
+
           {success && (
             <div className="authSuccess">
               {success}
             </div>
           )}
+
+          {/* 提交 */}
 
           <button
             type="submit"
@@ -221,16 +346,20 @@ export default function AuthModal({
           </button>
         </form>
 
+        {/* 切换 */}
+
         <div className="authSwitch">
           {mode === "login" ? (
             <>
               还没有账户？
+
               <button
-                onClick={() => {
-                  setMode("register");
-                  setError("");
-                  setSuccess("");
-                }}
+                type="button"
+                onClick={() =>
+                  switchMode(
+                    "register"
+                  )
+                }
               >
                 立即注册
               </button>
@@ -238,12 +367,14 @@ export default function AuthModal({
           ) : (
             <>
               已经有账户？
+
               <button
-                onClick={() => {
-                  setMode("login");
-                  setError("");
-                  setSuccess("");
-                }}
+                type="button"
+                onClick={() =>
+                  switchMode(
+                    "login"
+                  )
+                }
               >
                 返回登录
               </button>
