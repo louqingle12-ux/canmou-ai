@@ -1,5 +1,5 @@
 "use client";
-
+import { supabase } from "@/lib/supabase";
 import { useState } from "react";
 import { X, Check, Crown } from "lucide-react";
 
@@ -33,13 +33,23 @@ export default function ProModal({ onClose }: Props) {
     setLoading(true);
 
     try {
+      const {
+  data: {
+    session,
+  },
+} = await supabase.auth.getSession();
+
+if (!session?.access_token) {
+  throw new Error("请先登录");
+}
       const response = await fetch(
         "/api/pro-order",
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-          },
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${session.access_token}`,
+},
           body: JSON.stringify({
             billingCycle,
             paymentMethod,
