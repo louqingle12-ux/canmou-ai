@@ -121,6 +121,18 @@ export default function Home() {
    */
   const [remaining, setRemaining] = useState(5);
 
+  // 今日经营体检
+  const [diag, setDiag] = useState({
+    revenue: "",
+    orders: "",
+    foodCost: "",
+    commission: "",
+    reviews: "",
+    targetAov: "32",
+  });
+  const [diagResult, setDiagResult] = useState<any>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+
   const [authLoading, setAuthLoading] = useState(true);
 
   /* =========================================================
@@ -412,6 +424,155 @@ export default function Home() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  /* =========================================================
+     今日经营体检
+  ========================================================= */
+
+  function updateDiag(key: string, value: string) {
+    setDiag((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function runLocalDiagnosis() {
+    const revenue = Number(diag.revenue);
+    const orders = Number(diag.orders);
+    const foodCost = Number(diag.foodCost);
+    const commission = Number(diag.commission);
+    const reviews = Number(diag.reviews);
+    const targetAov = Number(diag.targetAov) || 32;
+
+    if (!revenue || !orders) return null;
+
+    const aov = revenue / orders;
+    const grossProfit = revenue - foodCost - commission;
+    const grossMargin = revenue ? (grossProfit / revenue) * 100 : 0;
+    const aovGap = Math.max(0, targetAov - aov);
+    const revenueOpportunity = aovGap * orders;
+    const reviewRate = reviews > 0 ? (reviews / orders) * 100 : 0;
+
+    let priority = "继续保持";
+    let severity = "good";
+    let reason = "当前输入数据没有发现明显的单一高风险项。";
+
+    if (aovGap >= 5) {
+      priority = "客单价偏低";
+      severity = "danger";
+      reason = `当前客单价约 ¥${aov.toFixed(2)}，距离目标 ¥${targetAov.toFixed(0)} 还有 ¥${aovGap.toFixed(2)}。`;
+    } else if (grossMargin < 45 && foodCost > 0) {
+      priority = "毛利承压";
+      severity = "danger";
+      reason = `按已填写成本估算，毛利率约 ${grossMargin.toFixed(1)}%，需要优先检查高成本菜品和平台扣点。`;
+    } else if (reviewRate >= 3) {
+      priority = "差评需要关注";
+      severity = "warning";
+      reason = `差评占订单约 ${reviewRate.toFixed(1)}%，建议先把最近差评按原因分类。`;
+    } else if (aovGap >= 2) {
+      priority = "有客单价提升空间";
+      severity = "warning";
+      reason = `当前客单价约 ¥${aov.toFixed(2)}，可以通过套餐和加购测试向目标靠近。`;
+    }
+
+    return {
+      revenue, orders, foodCost, commission, reviews, targetAov,
+      aov, grossProfit, grossMargin, aovGap, revenueOpportunity, reviewRate,
+      priority, severity, reason,
+    };
+  }
+
+  async function diagnoseToday() {
+    const result = runLocalDiagnosis();
+    if (!result) return;
+
+    setDiagResult(result);
+    setDiagLoading(true);
+
+    const prompt = `请对这家餐饮店做“今日经营体检”，必须严格基于以下数据，不要编造数据。
+今日营业额：¥${result.revenue}
+今日订单：${result.orders}
+食材成本：${result.foodCost ? `¥${result.foodCost}` : "未提供"}
+平台佣金：${result.commission ? `¥${result.commission}` : "未提供"}
+差评数：${result.reviews}
+目标客单价：¥${result.targetAov}
+已计算客单价：¥${result.aov.toFixed(2)}
+已计算毛利：${result.foodCost || result.commission ? `¥${result.grossProfit.toFixed(2)}` : "无法完整计算"}
+已计算毛利率：${result.foodCost || result.commission ? `${result.grossMargin.toFixed(1)}%` : "无法完整计算"}
+客单价提升空间对应的理论日营业额机会：¥${result.revenueOpportunity.toFixed(2)}
+
+请按以下格式回答：
+【经营判断】
+一句话判断今天最值得老板关注什么。
+【核心问题】
+只选1个最重要的问题。
+【原因分析】
+结合数据解释原因；无法判断的地方明确说“数据不足”。
+【明天行动】
+给出3个明天可以直接执行的动作，按优先级排序。
+【关键指标】
+告诉老板明天重点盯哪2-3个数字。
+【收益机会】
+如果存在可计算的提升空间，给出公式和“理论估算”，不要把估算当成保证。`;
+
+    // 复用现有 AI API；本地诊断即使 AI 暂时失败也会保留
+    const currentSession = (await supabase.auth.getSession()).data.session;
+    if (!currentSession) {
+      setDiagLoading(false);
+      setShowAuth(true);
+      return;
+    }
+    if (remaining === 0) {
+      setDiagLoading(false);
+      setShowPro(true);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentSession.access_token}`,
+        },
+        body: JSON.stringify({
+          tool: "ceo",
+          message: prompt,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.status === 402) {
+        setRemaining(0);
+        setShowPro(true);
+        return;
+      }
+      if (res.status === 401) {
+        await supabase.auth.signOut();
+        setSession(null);
+        setShowAuth(true);
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(data?.error || "AI诊断失败");
+      }
+
+      setDiagResult((prev: any) => ({
+        ...prev,
+        aiAnswer: data?.answer || "",
+      }));
+
+      if (typeof data?.remaining === "number") {
+        setRemaining(data.remaining);
+      }
+    } catch (error: any) {
+      console.error("Diagnosis error:", error);
+      setDiagResult((prev: any) => ({
+        ...prev,
+        aiAnswer: `AI暂时没有返回结果：${error?.message || "请稍后再试"}\n\n你仍可以先参考上面的数据诊断。`,
+      }));
+    } finally {
+      setDiagLoading(false);
     }
   }
 
@@ -781,7 +942,7 @@ export default function Home() {
               className="heroButton"
               onClick={() =>
                 document
-                  .getElementById("ai")
+                  .getElementById("diagnosis")
                   ?.scrollIntoView({
                     behavior: "smooth",
                   })
@@ -821,8 +982,86 @@ export default function Home() {
         </section>
 
         {/* ===================================================
+            TODAY DIAGNOSIS
+        =================================================== */}
+
+        <section className="diagnosisPanel" id="diagnosis">
+          <div className="diagnosisIntro">
+            <div>
+              <div className="diagnosisEyebrow">
+                <Sparkles size={14} />
+                DAILY BUSINESS CHECKUP
+              </div>
+              <h2>今天的店，<span>到底哪里在漏钱？</span></h2>
+              <p>填入今天最关键的经营数据，先用公式算清楚，再让 AI 找出最值得你明天处理的一个问题。</p>
+            </div>
+            <div className="diagnosisFree">
+              {remaining === -1 ? "PRO · 无限诊断" : `免费额度 · 剩余 ${remaining} 次`}
+            </div>
+          </div>
+
+          <div className="diagnosisForm">
+            {[
+              ["revenue", "今日营业额", "¥", "例如 3280"],
+              ["orders", "今日订单", "", "例如 126"],
+              ["foodCost", "食材成本", "¥", "例如 1180"],
+              ["commission", "平台佣金", "¥", "例如 420"],
+              ["reviews", "差评数", "", "例如 7"],
+              ["targetAov", "目标客单价", "¥", "默认 32"],
+            ].map(([key, label, prefix, placeholder]) => (
+              <label className="diagField" key={key}>
+                <span>{label}</span>
+                <div>
+                  {prefix && <b>{prefix}</b>}
+                  <input
+                    inputMode="decimal"
+                    value={(diag as any)[key]}
+                    onChange={(e) => updateDiag(key, e.target.value)}
+                    placeholder={placeholder}
+                  />
+                </div>
+              </label>
+            ))}
+            <button
+              type="button"
+              className="diagnoseButton"
+              onClick={diagnoseToday}
+              disabled={diagLoading || !diag.revenue || !diag.orders}
+            >
+              {diagLoading ? "AI正在体检…" : "开始今日经营体检"}
+              <ArrowUpRight size={17} />
+            </button>
+          </div>
+
+          {diagResult && (
+            <div className="diagnosisResult">
+              <div className="scoreBlock">
+                <span>今日核心问题</span>
+                <strong>{diagResult.priority}</strong>
+                <small>{diagResult.reason}</small>
+              </div>
+
+              <div className="metricStrip">
+                <div><span>客单价</span><strong>¥{diagResult.aov.toFixed(2)}</strong></div>
+                <div><span>预计毛利</span><strong>{diagResult.foodCost || diagResult.commission ? `¥${diagResult.grossProfit.toFixed(0)}` : "—"}</strong></div>
+                <div><span>毛利率</span><strong>{diagResult.foodCost || diagResult.commission ? `${diagResult.grossMargin.toFixed(1)}%` : "—"}</strong></div>
+                <div><span>理论增收空间</span><strong>¥{diagResult.revenueOpportunity.toFixed(0)}/天</strong></div>
+              </div>
+
+              <div className="diagnosisAI">
+                <div className="diagnosisAITitle"><Bot size={17} /> 餐谋 AI 深度诊断</div>
+                <div className="diagnosisAIText">
+                  {diagResult.aiAnswer || "AI分析中…"}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ===================================================
             STATS
         =================================================== */}
+
 
         <section className="stats">
 
