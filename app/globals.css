@@ -1693,3 +1693,262 @@ button:disabled {
     max-width: 170px;
   }
 }
+
+
+/* =========================================================
+   V2 · 今日经营体检
+========================================================= */
+.diagnosisPanel {
+  margin-top: 14px;
+  padding: 26px;
+  border: 1px solid #294737;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(165,255,204,.08), transparent 32%),
+    #0b1511;
+}
+
+.diagnosisIntro {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.diagnosisEyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8de9b3;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.diagnosisIntro h2 {
+  margin: 9px 0 8px;
+  font-size: 25px;
+  letter-spacing: -1px;
+}
+
+.diagnosisIntro h2 span {
+  color: #a5ffcc;
+}
+
+.diagnosisIntro p {
+  max-width: 650px;
+  margin: 0;
+  color: #71847b;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.diagnosisFree {
+  flex-shrink: 0;
+  padding: 8px 11px;
+  border: 1px solid #294b38;
+  border-radius: 999px;
+  color: #9ae9b8;
+  background: #102219;
+  font-size: 10px;
+}
+
+.diagnosisForm {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 11px;
+}
+
+.diagField > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #71847b;
+  font-size: 10px;
+}
+
+.diagField > div {
+  height: 43px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid #20372b;
+  border-radius: 10px;
+  background: #08110d;
+}
+
+.diagField b {
+  color: #687a72;
+  font-size: 12px;
+}
+
+.diagField input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #e4eee9;
+  font-size: 13px;
+}
+
+.diagField input::placeholder {
+  color: #3f5149;
+}
+
+.diagnoseButton {
+  grid-column: span 3;
+  min-height: 46px;
+  margin-top: 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 10px;
+  background: #a5ffcc;
+  color: #07100d;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.diagnoseButton:disabled {
+  opacity: .45;
+}
+
+.diagnosisResult {
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #294b38;
+  border-radius: 14px;
+  background: #0d1c15;
+}
+
+.scoreBlock {
+  padding: 19px 20px;
+}
+
+.scoreBlock > span {
+  color: #758980;
+  font-size: 10px;
+}
+
+.scoreBlock strong {
+  display: block;
+  margin-top: 6px;
+  color: #a5ffcc;
+  font-size: 24px;
+  letter-spacing: -.8px;
+}
+
+.scoreBlock small {
+  display: block;
+  margin-top: 6px;
+  color: #a9b9b2;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.metricStrip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid #20372b;
+  border-bottom: 1px solid #20372b;
+}
+
+.metricStrip div {
+  padding: 15px 17px;
+  border-right: 1px solid #20372b;
+}
+
+.metricStrip div:last-child {
+  border-right: 0;
+}
+
+.metricStrip span {
+  display: block;
+  color: #64776e;
+  font-size: 9px;
+}
+
+.metricStrip strong {
+  display: block;
+  margin-top: 5px;
+  color: #e1ebe6;
+  font-size: 18px;
+}
+
+.diagnosisAI {
+  padding: 19px 20px;
+}
+
+.diagnosisAITitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #a5ffcc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.diagnosisAIText {
+  margin-top: 12px;
+  color: #c7d5ce;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.85;
+}
+
+/* 手机端体检 */
+@media (max-width: 820px) {
+  .diagnosisForm {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .diagnoseButton {
+    grid-column: span 2;
+  }
+
+  .metricStrip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .metricStrip div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .metricStrip div:nth-child(-n+2) {
+    border-bottom: 1px solid #20372b;
+  }
+}
+
+@media (max-width: 560px) {
+  .diagnosisPanel {
+    padding: 17px 14px;
+  }
+
+  .diagnosisIntro {
+    display: block;
+  }
+
+  .diagnosisFree {
+    display: inline-block;
+    margin-top: 12px;
+  }
+
+  .diagnosisIntro h2 {
+    font-size: 22px;
+  }
+
+  .diagnosisForm {
+    grid-template-columns: 1fr;
+  }
+
+  .diagnoseButton {
+    grid-column: span 1;
+  }
+
+  .metricStrip strong {
+    font-size: 16px;
+  }
+}
