@@ -294,25 +294,31 @@ export default function AdminPage() {
         return;
       }
 
-      const res = await fetch(
-        `/api/admin/orders/${orderId}`,
-        {
-          method: "PATCH",
+      const isApprove = status === "approved";
 
-          headers: {
-            "Content-Type":
-              "application/json",
+const res = await fetch(
+  isApprove
+    ? `/api/admin/orders/${orderId}/approve`
+    : `/api/admin/orders/${orderId}`,
+  {
+    method: isApprove ? "POST" : "PATCH",
 
-            Authorization:
-              `Bearer ${session.access_token}`,
-          },
+    headers: {
+      "Content-Type": "application/json",
 
+      Authorization:
+        `Bearer ${session.access_token}`,
+    },
+
+    ...(isApprove
+      ? {}
+      : {
           body: JSON.stringify({
-            status,
+            status: "rejected",
           }),
-        }
-      );
-
+        }),
+  }
+);
       let data: any = null;
 
       try {
