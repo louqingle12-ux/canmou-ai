@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export const runtime = "nodejs";
 
-// 可在 Vercel 环境变量中设置：
-// ADMIN_EMAILS=louqingle12@gmail.com
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+const serviceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 const adminEmails = (process.env.ADMIN_EMAILS || "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
@@ -30,67 +33,46 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: Request) {
   try {
-    // ==========================================
+    // ==============================
     // 1. 检查环境变量
-    // ==========================================
+    // ==============================
 
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
         {
           success: false,
-          code: "SUPABASE_ENV_MISSING",
-          error:
-            "服务器缺少 Supabase Admin 环境变量",
+          error: "Supabase 管理员环境变量缺失",
         },
         { status: 500 }
       );
     }
 
-    // ==========================================
+    // ==============================
     // 2. 获取登录 Token
-    // ==========================================
+    // ==============================
 
     const authorization =
       request.headers.get("authorization");
 
-    if (!authorization) {
+    if (
+      !authorization ||
+      !authorization.startsWith("Bearer ")
+    ) {
       return NextResponse.json(
         {
           success: false,
-          code: "NO_AUTHORIZATION",
-          error: "没有登录凭证",
+          error: "请先登录",
         },
         { status: 401 }
       );
     }
 
-    if (!authorization.startsWith("Bearer ")) {
-      return NextResponse.json(
-        {
-          success: false,
-          code: "INVALID_AUTHORIZATION",
-          error: "登录凭证格式错误",
-        },
-        { status: 401 }
-      );
-    }
+    const token =
+      authorization.slice(7).trim();
 
-    const token = authorization.slice(7).trim();
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          code: "EMPTY_TOKEN",
-          error: "登录凭证为空",
-        },
-        { status: 401 }
-      );
-    }
-
-    // ==========================================
-    // 3. 验证 Supabase 用户
-    // ==========================================
+    // ==============================
+    // 3. 验证当前用户
+    // ==============================
 
     const {
       data: authData,
@@ -102,33 +84,25 @@ export async function GET(request: Request) {
 
     if (authError || !user) {
       console.error(
-        "Supabase auth error:",
+        "Admin auth error:",
         authError
       );
 
       return NextResponse.json(
         {
           success: false,
-          code: "INVALID_TOKEN",
-          error:
-            "登录已失效，请退出后重新登录",
+          error: "登录已失效，请重新登录",
         },
         { status: 401 }
       );
     }
 
-    const userEmail =
+    const email =
       (user.email || "").toLowerCase();
 
-    console.log(
-      "Admin API user:",
-      userEmail,
-      user.id
-    );
-
-    // ==========================================
-    // 4. 查询 profiles
-    // ==========================================
+    // ==============================
+    // 4. 查询管理员 Profile
+    // ==============================
 
     const {
       data: profile,
@@ -147,110 +121,100 @@ export async function GET(request: Request) {
         "Profile query error:",
         profileError
       );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "查询管理员资料失败",
+          detail: profileError.message,
+        },
+        { status: 500 }
+      );
     }
 
-    // ==========================================
-    // 5. 三种管理员身份
-    // ==========================================
+    // ==============================
+    // 5. 三重管理员判断
+    // ==============================
 
-    // 方法一：
-    // profiles.is_admin = true
-    const isProfileAdmin =
+    const profileAdmin =
       profile?.is_admin === true;
 
-    // 方法二：
-    // Supabase user metadata
-    const metadataRole =
-      user.app_metadata?.role;
+    const metadataAdmin =
+      user.app_metadata?.role ===
+      "admin";
 
-    const isMetadataAdmin =
-      metadataRole === "admin";
-
-    // 方法三：
-    // Vercel ADMIN_EMAILS
-    const isEmailAdmin =
-      !!userEmail &&
-      adminEmails.includes(userEmail);
+    const emailAdmin =
+      adminEmails.includes(email);
 
     const isAdmin =
-      isProfileAdmin ||
-      isMetadataAdmin ||
-      isEmailAdmin;
-
-    console.log("Admin permission:", {
-      email: userEmail,
-      userId: user.id,
-      profileExists: !!profile,
-      profileAdmin: isProfileAdmin,
-      metadataAdmin: isMetadataAdmin,
-      emailAdmin: isEmailAdmin,
-      isAdmin,
-    });
-
-    // ==========================================
-    // 6. 没有管理员权限
-    // ==========================================
+      profileAdmin ||
+      metadataAdmin ||
+      emailAdmin;
 
     if (!isAdmin) {
       return NextResponse.json(
         {
           success: false,
-          code: "NOT_ADMIN",
-          error: "当前账户没有管理员权限",
-
-          // 返回诊断信息
+          error:
+            "当前账户没有管理员权限",
           user: {
             id: user.id,
             email: user.email,
           },
-
-          profile: profile
-            ? {
-                is_admin:
-                  profile.is_admin,
-                plan: profile.plan,
-              }
-            : null,
-
           checks: {
-            profileAdmin:
-              isProfileAdmin,
-            metadataAdmin:
-              isMetadataAdmin,
-            emailAdmin:
-              isEmailAdmin,
+            profileAdmin,
+            metadataAdmin,
+            emailAdmin,
           },
         },
         { status: 403 }
       );
     }
 
-    // ==========================================
-    // 7. 获取订单
-    // ==========================================
+    // ==============================
+    // 6. ★ 读取真正的 PRO 订单表
+    // ==============================
 
     const {
       data: orders,
       error: ordersError,
     } =
       await supabaseAdmin
-        .from("orders")
-        .select("*")
-        .order("created_at", {
-          ascending: false,
-        });
+        .from("pro_orders")
+        .select(`
+          id,
+          order_no,
+          user_id,
+          email,
+          plan,
+          billing_cycle,
+          amount,
+          payment_method,
+          status,
+          created_at,
+          paid_at,
+          expires_at,
+          approved_at,
+          approved_by,
+          trade_no
+        `)
+        .order(
+          "created_at",
+          {
+            ascending: false,
+          }
+        );
 
     if (ordersError) {
       console.error(
-        "Orders query error:",
+        "PRO orders query error:",
         ordersError
       );
 
       return NextResponse.json(
         {
           success: false,
-          code: "ORDERS_QUERY_ERROR",
-          error: "获取订单失败",
+          error: "获取 PRO 订单失败",
           detail:
             ordersError.message,
         },
@@ -258,71 +222,102 @@ export async function GET(request: Request) {
       );
     }
 
-    // ==========================================
-    // 8. 获取订单用户邮箱
-    // ==========================================
-
-    const userIds = Array.from(
-      new Set(
-        (orders || [])
-          .map(
-            (order) =>
-              order.user_id
-          )
-          .filter(Boolean)
-      )
-    );
-
-    const userMap: Record<
-      string,
-      string
-    > = {};
-
-    for (const userId of userIds) {
-      try {
-        const {
-          data: userData,
-          error: userError,
-        } =
-          await supabaseAdmin.auth.admin.getUserById(
-            userId
-          );
-
-        if (
-          !userError &&
-          userData?.user
-        ) {
-          userMap[userId] =
-            userData.user.email || "";
-        }
-      } catch (error) {
-        console.error(
-          "Get order user error:",
-          userId,
-          error
-        );
-      }
-    }
-
-    // ==========================================
-    // 9. 合并订单数据
-    // ==========================================
+    // ==============================
+    // 7. 整理订单
+    // ==============================
 
     const result =
       (orders || []).map(
         (order) => ({
-          ...order,
+          id: order.id,
+
+          order_no:
+            order.order_no,
+
+          user_id:
+            order.user_id,
 
           user_email:
-            userMap[
-              order.user_id
-            ] || "未知用户",
+            order.email || "未知用户",
+
+          email:
+            order.email || "未知用户",
+
+          plan:
+            order.plan || "pro",
+
+          billing_cycle:
+            order.billing_cycle ||
+            "monthly",
+
+          amount:
+            Number(order.amount || 0),
+
+          payment_method:
+            order.payment_method ||
+            "wechat",
+
+          status:
+            order.status || "pending",
+
+          created_at:
+            order.created_at,
+
+          paid_at:
+            order.paid_at,
+
+          expires_at:
+            order.expires_at,
+
+          approved_at:
+            order.approved_at,
+
+          approved_by:
+            order.approved_by,
+
+          trade_no:
+            order.trade_no,
         })
       );
 
-    // ==========================================
-    // 10. 返回管理员数据
-    // ==========================================
+    // ==============================
+    // 8. 统计
+    // ==============================
+
+    const pending =
+      result.filter(
+        (order) =>
+          order.status ===
+          "pending"
+      );
+
+    const approved =
+      result.filter(
+        (order) =>
+          order.status ===
+          "approved"
+      );
+
+    const rejected =
+      result.filter(
+        (order) =>
+          order.status ===
+          "rejected"
+      );
+
+    const totalRevenue =
+      approved.reduce(
+        (sum, order) =>
+          sum +
+          Number(
+            order.amount || 0
+          ),
+        0
+      );
+
+    // ==============================
+    // 9. 返回管理员数据
+    // ==============================
 
     return NextResponse.json({
       success: true,
@@ -332,54 +327,30 @@ export async function GET(request: Request) {
         email: user.email,
         is_admin: true,
         plan:
-          profile?.plan || "free",
-        permission:
-          isProfileAdmin
-            ? "profile"
-            : isMetadataAdmin
-            ? "metadata"
-            : "email",
+          profile?.plan ||
+          "free",
       },
 
       orders: result,
 
       stats: {
-        total:
-          result.length,
-
-        pending:
-          result.filter(
-            (order) =>
-              order.status ===
-              "pending"
-          ).length,
-
-        approved:
-          result.filter(
-            (order) =>
-              order.status ===
-              "approved"
-          ).length,
-
-        rejected:
-          result.filter(
-            (order) =>
-              order.status ===
-              "rejected"
-          ).length,
+        total: result.length,
+        pending: pending.length,
+        approved: approved.length,
+        rejected: rejected.length,
+        revenue: totalRevenue,
       },
     });
   } catch (error) {
     console.error(
-      "Admin orders GET error:",
+      "Admin orders fatal error:",
       error
     );
 
     return NextResponse.json(
       {
         success: false,
-        code: "SERVER_ERROR",
-        error: "服务器内部错误",
+        error: "管理员订单接口发生错误",
         detail:
           error instanceof Error
             ? error.message
