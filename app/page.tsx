@@ -1061,8 +1061,41 @@ ${grossMargin !== null ? `毛利：¥${(grossProfit as number).toFixed(2)}，毛
         </div>
       </section>}
 
-      <section className="mainGrid"><div className="panel menuPanel"><div className="panelHeader"><div><span>MENU INTELLIGENCE</span><h3>今日菜品表现</h3></div><button type="button">查看全部 <ChevronRight size={15}/></button></div><div className="dishGrid">{dishes.map((dish)=><div className="dish" key={dish.name}><div className="dishImage"><img src={dish.image} alt={dish.name}/><b>{dish.tag === "爆款" && <Flame size={12}/>} {dish.tag}</b></div><div className="dishInfo"><strong>{dish.name}</strong><div><span>{dish.price}</span><small>{dish.sales}份</small></div><label>毛利率 <em>{dish.margin}</em></label></div></div>)}</div></div>
-      <div className="panel alertPanel"><div className="panelHeader"><div><span>AI INSIGHT</span><h3>AI今日诊断</h3></div><Bot size={21}/></div><div className="insight"><div className="insightIcon"><TrendingUp size={19}/></div><div><strong>营业额正在增长</strong><p>今日营业额较昨日增长12.8%，其中招牌宫保鸡丁贡献明显。</p></div></div><div className="insight warning"><div className="insightIcon"><AlertTriangle size={19}/></div><div><strong>发现一个经营机会</strong><p>高毛利菜品曝光不足，建议将招牌炒饭放入套餐。</p></div></div><button type="button" className="fullButton" onClick={()=>document.getElementById("daily-report")?.scrollIntoView({behavior:"smooth"})}>用真实数据深度分析 <ChevronRight size={16}/></button></div></section>
+      <section className="mainGrid">
+      <div className="panel menuPanel">
+        <div className="panelHeader">
+          <div><span>MENU INTELLIGENCE</span><h3>菜品经营分析</h3></div>
+          <span className="dataStatusBadge">真实数据优先</span>
+        </div>
+        <div className="dataEmptyState">
+          <div className="dataEmptyIcon"><Utensils size={22}/></div>
+          <strong>等待录入你的菜品数据</strong>
+          <p>当前版本没有连接真实的菜品销量与成本记录，因此暂不展示虚构销量、毛利率或“爆款”标签。</p>
+          <button type="button" className="fullButton" onClick={() => { setActive("menu"); document.getElementById("menu-ai")?.scrollIntoView({behavior:"smooth"}); }}>
+            前往菜单 AI 分析 <ChevronRight size={16}/>
+          </button>
+        </div>
+      </div>
+      <div className="panel alertPanel">
+        <div className="panelHeader"><div><span>AI INSIGHT</span><h3>经营数据状态</h3></div><Bot size={21}/></div>
+        {dailyHistory.length >= 2 ? (
+          <div className="insight">
+            <div className="insightIcon"><TrendingUp size={19}/></div>
+            <div><strong>已具备趋势分析基础</strong><p>当前保存了 {dailyHistory.length} 条经营记录。录入并核对不同日期的数据后，即可计算真实变化趋势。</p></div>
+          </div>
+        ) : (
+          <div className="insight">
+            <div className="insightIcon"><BarChart3 size={19}/></div>
+            <div><strong>经营趋势待建立</strong><p>目前历史记录不足，暂不显示营业额增长率或菜品贡献结论。至少记录两个日期的数据后再进行比较。</p></div>
+          </div>
+        )}
+        <div className="insight warning">
+          <div className="insightIcon"><AlertTriangle size={19}/></div>
+          <div><strong>建议先完善今日数据</strong><p>补齐营业额、订单量、食材成本和平台佣金，才能得到更可靠的客单价、毛利与经营建议。</p></div>
+        </div>
+        <button type="button" className="fullButton" onClick={() => document.getElementById("daily-report")?.scrollIntoView({behavior:"smooth"})}>录入真实经营数据 <ChevronRight size={16}/></button>
+      </div>
+    </section>
 
       <section className="panel aiPanel" id="ai"><div className="aiHeader"><div><div className="aiBadge"><Sparkles size={14}/>DEEPSEEK POWERED</div><h3>AI经营顾问</h3><p>把你的经营问题交给餐谋AI。</p><div className="creditBadge">{remaining === -1 ? "PRO · 无限AI分析" : `免费额度 · 剩余 ${remaining} 次`}</div></div><Bot size={34}/></div><div className="aiInput"><textarea value={question} onChange={(e)=>setQuestion(e.target.value)} placeholder="例如：今天营业额下降了15%，帮我找出可能原因，并告诉我明天应该怎么做……" disabled={loading}/><button type="button" onClick={askAI} disabled={loading || !question.trim()}>{loading ? "AI分析中..." : "开始分析"}<ArrowUpRight size={17}/></button></div>{answer && <div className="aiAnswer"><div className="answerTitle"><Bot size={18}/>餐谋AI分析结果</div><div className="answerBody" style={{whiteSpace:"pre-wrap"}}>{answer}</div></div>}</section>
     </section>
