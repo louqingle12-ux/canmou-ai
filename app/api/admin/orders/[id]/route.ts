@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function PATCH(
   request: NextRequest,
   context: {
@@ -13,6 +8,28 @@ export async function PATCH(
   }
 ) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Missing Supabase server environment variables for order rejection.");
+      return NextResponse.json(
+        { error: "服务器认证配置缺失，请联系管理员检查环境变量。" },
+        { status: 500 }
+      );
+    }
+
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
     const { id } = await context.params;
 
     if (!id) {
